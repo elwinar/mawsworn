@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+lockname="/tmp/$(basename $0)-$USER.lock"
+locked=false
+
+usage() {
+	cat <<EOF
+Usage: $(basename $0) [-h] [-v]
+
+Improved version of the input lag fix for MacOS. For more
+information, see
+https://superuser.com/questions/698026/ssh-on-a-local-machine-is-slow-with-mac-os-x-server.
+
+Available options:
+
+-h, --help      Print this help and exit
+-v, --verbose   Print script debug info
+EOF
+exit
+}
+
+cleanup() {
+	trap - SIGINT SIGTERM ERR EXIT
+	if [ "$locked" = true ]; then
+		rm -f "$lockname"
+	fi
+}
+
+msg() {
+	echo >&2 -e "${1-}"
+}
+
+die() {
+	local msg=$1
+	local code=${2-1} # default exit status 1
+	msg "$msg"
+	exit "$code"
+}
+
+parse_params() {
+	# default values of variables set from params
+	flag=0
+	param=''
+
+	while :; do
+		case "${1-}" in
+		-h | --help) usage ;;
+		-v | --verbose) set -x ;;
+		-?*) die "Unknown option: $1" ;;
+		*) break ;;
+		esac
+		shift
+	done
+
+	args=("$@")
+
+	return 0
+}
+
+parse_params "$@"
+
+(set -o noclobber ; echo > "$lockname" ) 2>/dev/null || die "already locked" 0
+
+locked=true
+
+while [ $(who | grep "$USER" | wc -l) != 0 ]
+do
+	echo -n .
+	sleep 0.1
+done
